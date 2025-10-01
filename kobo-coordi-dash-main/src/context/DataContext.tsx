@@ -4,7 +4,7 @@ import { getApiUrl } from "@/config/apiConfig";
 
 // Define interfaces
 interface Submission {
-  tool_id: string;
+  tool_id?: string;
   _submission_time: string;
   coordinator_email?: string;
   Email_of_the_Coordinator?: string;
@@ -134,11 +134,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         evalSubs[key as keyof EvalSubs] = data.results || [];
       }
 
-      // Create sets of tool_ids with submissions
-      const advanced3 = new Set(evalSubs.advanced3.map((sub) => sub.tool_id));
-      const early3 = new Set(evalSubs.early3.map((sub) => sub.tool_id));
-      const advanced4 = new Set(evalSubs.advanced4.map((sub) => sub.tool_id));
-      const early4 = new Set(evalSubs.early4.map((sub) => sub.tool_id));
+      // Create sets of tool_ids with submissions, using robust field extraction
+      const getToolId = (sub: Submission): string => {
+        return String(
+          sub["group_intro/Q_13110000"] ||
+          sub["group_requester/Q_13110000"] ||
+          sub["Q_13110000"] ||
+          sub.tool_id ||
+          ""
+        ).trim();
+      };
+
+      const advanced3 = new Set(evalSubs.advanced3.map(getToolId));
+      const early3 = new Set(evalSubs.early3.map(getToolId));
+      const advanced4 = new Set(evalSubs.advanced4.map(getToolId));
+      const early4 = new Set(evalSubs.early4.map(getToolId));
 
       // Process tools
       let evaluated = 0;
@@ -163,15 +173,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           has3 = advanced3.has(toolId);
           has4 = advanced4.has(toolId);
           allEvalForTool = [
-            ...evalSubs.advanced3.filter((s) => s.tool_id === toolId),
-            ...evalSubs.advanced4.filter((s) => s.tool_id === toolId),
+            ...evalSubs.advanced3.filter((s) => getToolId(s) === toolId),
+            ...evalSubs.advanced4.filter((s) => getToolId(s) === toolId),
           ];
         } else if (maturity === "early") {
           has3 = early3.has(toolId);
           has4 = early4.has(toolId);
           allEvalForTool = [
-            ...evalSubs.early3.filter((s) => s.tool_id === toolId),
-            ...evalSubs.early4.filter((s) => s.tool_id === toolId),
+            ...evalSubs.early3.filter((s) => getToolId(s) === toolId),
+            ...evalSubs.early4.filter((s) => getToolId(s) === toolId),
           ];
         } else {
           return; // Skip unknown maturity
@@ -206,7 +216,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .map(([id]) => id);
       let activities: Activity[] = appointedIds.map((id) => ({
         id,
-        tool: toolMap[id][KOBO_CONFIG.TOOL_NAME_FIELD] || "Unknown Tool",
+        tool: toolMap[id]?.[KOBO_CONFIG.TOOL_NAME_FIELD] || "Unknown Tool",
         status: toolStatus[id] || "pending",
         date: (appointmentTimes[id] || lastTimes[id]).toLocaleDateString("en-CA"),
         coordinator: currentCoord[id],
@@ -221,7 +231,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStats({ totalTools, appointedTools, evaluatedTools: evaluated, ongoingTools: ongoing, completionRate });
       setRecentActivity(recent);
     } catch (error) {
-      setError(error.message || "Failed to fetch data");
+      setError(error instanceof Error ? error.message : "Failed to fetch data");
       console.error("Data fetch error:", error);
     } finally {
       setLoading(false);
