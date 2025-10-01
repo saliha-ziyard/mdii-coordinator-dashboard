@@ -1,114 +1,130 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, FileText, Calendar, User, MapPin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { useData } from "@/context/DataContext";
+import { getApiUrl } from "@/config/apiConfig";
+import { KOBO_CONFIG } from "@/config/koboConfig";
 
-// Mock data for tool details
-const mockToolData = {
-  "TOOL001": {
-    name: "Agricultural Water Management Tool",
-    coordinator: "john.doe@cgiar.org",
-    status: "Active",
-    createdDate: "2024-01-15",
-    location: "Kenya, Ethiopia",
-    description: "Tool for managing water resources in agricultural settings",
-    submissions: {
-      ut3: [
-        {
-          id: "UT3-001",
-          submittedBy: "farmer@example.com",
-          submissionDate: "2024-03-20 14:30",
-          responses: {
-            "Water source": "Borehole",
-            "Irrigation method": "Drip irrigation",
-            "Crop type": "Tomatoes",
-            "Water quality": "Good"
-          }
-        },
-        {
-          id: "UT3-002",
-          submittedBy: "extension@example.com",
-          submissionDate: "2024-03-18 09:15",
-          responses: {
-            "Water source": "River",
-            "Irrigation method": "Sprinkler",
-            "Crop type": "Maize",
-            "Water quality": "Fair"
-          }
-        }
-      ],
-      ut4: [
-        {
-          id: "UT4-001",
-          submittedBy: "researcher@example.com",
-          submissionDate: "2024-03-22 16:45",
-          responses: {
-            "Efficiency rating": "8/10",
-            "Cost effectiveness": "High",
-            "User satisfaction": "Very satisfied",
-            "Recommendations": "Continue implementation"
-          }
-        }
-      ],
-      general: [
-        {
-          id: "GEN-001",
-          submittedBy: "coordinator@example.com",
-          submissionDate: "2024-03-25 11:20",
-          responses: {
-            "Overall progress": "On track",
-            "Challenges": "Limited water access in some areas",
-            "Next steps": "Expand to additional regions"
-          }
-        }
-      ]
-    }
-  },
-  "TOOL002": {
-    name: "Crop Yield Optimization Tool",
-    coordinator: "jane.smith@cgiar.org",
-    status: "Under Review",
-    createdDate: "2024-02-01",
-    location: "Nigeria, Ghana",
-    description: "Tool for optimizing crop yields through data analysis",
-    submissions: {
-      ut3: [
-        {
-          id: "UT3-003",
-          submittedBy: "farmer2@example.com",
-          submissionDate: "2024-03-21 13:00",
-          responses: {
-            "Crop variety": "Improved maize",
-            "Fertilizer type": "NPK",
-            "Yield increase": "25%",
-            "Soil type": "Clay loam"
-          }
-        }
-      ],
-      ut4: [],
-      general: []
-    }
-  }
-};
+interface ToolDetailsData {
+  id: string;
+  name: string;
+  coordinator: string;
+  status: string;
+  createdDate: string;
+  location: string;
+  description: string;
+  submissions: {
+    ut3: Submission[];
+    ut4: Submission[];
+    general: Submission[];
+  };
+}
+
+interface Submission {
+  id: string;
+  submittedBy: string;
+  submissionDate: string;
+  responses: { [key: string]: string };
+}
 
 export function ToolDetails() {
   const [toolId, setToolId] = useState("");
-  const [selectedTool, setSelectedTool] = useState<any>(null);
+  const [selectedTool, setSelectedTool] = useState<ToolDetailsData | null>(null);
   const [activeSubmissionType, setActiveSubmissionType] = useState<string>("ut3");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { coordinatorEmail } = useData();
 
-  const handleSearch = () => {
-    if (toolId && mockToolData[toolId as keyof typeof mockToolData]) {
-      setSelectedTool(mockToolData[toolId as keyof typeof mockToolData]);
-    } else {
+  const handleSearch = async () => {
+    if (!toolId) {
+      setError("Please enter a Tool ID");
       setSelectedTool(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch main form data to get tool details
+      const mainRes = await fetch(getApiUrl(`assets/${KOBO_CONFIG.MAIN_FORM_ID}/data.json`, "mainForm"));
+      if (!mainRes.ok) throw new Error("Failed to fetch tool data");
+      const mainData = await mainRes.json();
+      const mainSubs = mainData.results || [];
+
+      // Find the tool by ID
+      const tool = mainSubs.find((sub: any) => sub[KOBO_CONFIG.TOOL_ID_FIELD] === toolId);
+      if (!tool) {
+        setError(`No tool found with ID: ${toolId}`);
+        setSelectedTool(null);
+        return;
+      }
+
+      // Fetch change coordinator data to get the latest coordinator
+      const changeRes = await fetch(getApiUrl(`assets/${KOBO_CONFIG.change_coordinator}/data.json`, "changeCoordinator"));
+      if (!changeRes.ok) throw new Error("Failed to fetch coordinator changes");
+      const changeData = await changeRes.json();
+      const changeSubs = changeData.results || [];
+
+      // Determine current coordinator
+      let coordinator = tool.coordinator_email || coordinatorEmail;
+      const latestChange = changeSubs
+        .filter((ch: any) => ch.tool_id === toolId)
+        .sort((a: any, b: any) => new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime())[0];
+      if (latestChange && latestChange.Email_of_the_Coordinator) {
+        coordinator = latestChange.Email_of_the_Coordinator;
+      }
+
+      // Fetch submissions for the tool
+      const formMap = {
+        ut3: tool[KOBO_CONFIG.MATURITY_FIELD] === "advanced" ? KOBO_CONFIG.USERTYPE3_FORMS.advanced : KOBO_CONFIG.USERTYPE3_FORMS.early,
+        ut4: tool[KOBO_CONFIG.MATURITY_FIELD] === "advanced" ? KOBO_CONFIG.USERTYPE4_FORMS.advanced : KOBO_CONFIG.USERTYPE4_FORMS.early,
+        general: KOBO_CONFIG.MAIN_FORM_ID,
+      };
+
+      const submissions: ToolDetailsData["submissions"] = { ut3: [], ut4: [], general: [] };
+      for (const [type, formId] of Object.entries(formMap)) {
+        const res = await fetch(getApiUrl(`assets/${formId}/data.json`, type));
+        if (!res.ok) throw new Error(`Failed to fetch ${type} submissions`);
+        const data = await res.json();
+        const subs = (data.results || [])
+          .filter((sub: any) => sub.tool_id === toolId)
+          .map((sub: any) => ({
+            id: sub._id || `SUB-${type}-${sub._submission_time}`,
+            submittedBy: sub.submitted_by || "Unknown",
+            submissionDate: new Date(sub._submission_time).toLocaleString(),
+            responses: Object.fromEntries(
+              Object.entries(sub).filter(([key]) => !key.startsWith("_") && key !== "tool_id")
+            ),
+          }));
+        submissions[type as keyof typeof submissions] = subs;
+      }
+
+      // Construct tool details
+      const toolDetails: ToolDetailsData = {
+        id: toolId,
+        name: tool[KOBO_CONFIG.TOOL_NAME_FIELD] || "Unknown Tool",
+        coordinator,
+        status: tool.status || "Unknown",
+        createdDate: new Date(tool._submission_time).toLocaleDateString(),
+        location: tool.location || "Not specified",
+        description: tool.description || "No description available",
+        submissions,
+      };
+
+      setSelectedTool(toolDetails);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch tool details");
+      setSelectedTool(null);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       handleSearch();
     }
   };
@@ -135,12 +151,16 @@ export function ToolDetails() {
               onChange={(e) => setToolId(e.target.value)}
               onKeyPress={handleKeyPress}
               className="flex-1"
+              disabled={loading}
             />
-            <Button onClick={handleSearch}>
+            <Button onClick={handleSearch} disabled={loading}>
               <Search className="w-4 h-4 mr-2" />
-              Search
+              {loading ? "Searching..." : "Search"}
             </Button>
           </div>
+          {error && (
+            <p className="text-destructive text-sm mt-2">{error}</p>
+          )}
         </CardContent>
       </Card>
 
@@ -219,7 +239,7 @@ export function ToolDetails() {
                     No {activeSubmissionType.toUpperCase()} submissions found
                   </p>
                 ) : (
-                  selectedTool.submissions[activeSubmissionType].map((submission: any, index: number) => (
+                  selectedTool.submissions[activeSubmissionType].map((submission: Submission) => (
                     <Card key={submission.id} className="border-l-4 border-l-forest">
                       <CardHeader className="pb-3">
                         <div className="flex justify-between items-start">
@@ -237,7 +257,7 @@ export function ToolDetails() {
                           {Object.entries(submission.responses).map(([question, answer]) => (
                             <div key={question}>
                               <p className="font-medium text-sm">{question}:</p>
-                              <p className="text-muted-foreground text-sm ml-4">{answer as string}</p>
+                              <p className="text-muted-foreground text-sm ml-4">{answer}</p>
                             </div>
                           ))}
                         </div>
@@ -252,14 +272,11 @@ export function ToolDetails() {
       )}
 
       {/* No Tool Found */}
-      {toolId && !selectedTool && (
+      {toolId && !selectedTool && !loading && !error && (
         <Card>
           <CardContent className="text-center py-8">
             <p className="text-muted-foreground">
               No tool found with ID: <span className="font-mono">{toolId}</span>
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Try searching for TOOL001 or TOOL002
             </p>
           </CardContent>
         </Card>
