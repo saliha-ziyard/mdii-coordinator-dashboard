@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useData } from "@/context/DataContext";
 import { getApiUrl } from "@/config/apiConfig";
 import { KOBO_CONFIG } from "@/config/koboConfig";
+import { Loader } from "@/components/Loader";
 
 interface ToolDetailsData {
   id: string;
@@ -164,8 +165,17 @@ export function ToolDetails() {
         </CardContent>
       </Card>
 
+      {/* Loader for fetching state */}
+      {loading && (
+        <Card>
+          <CardContent className="flex justify-center py-8">
+            <Loader />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tool Information */}
-      {selectedTool && (
+      {!loading && selectedTool && (
         <>
           <Card>
             <CardHeader>
@@ -272,7 +282,7 @@ export function ToolDetails() {
       )}
 
       {/* No Tool Found */}
-      {toolId && !selectedTool && !loading && !error && (
+      {!loading && toolId && !selectedTool && !error && (
         <Card>
           <CardContent className="text-center py-8">
             <p className="text-muted-foreground">

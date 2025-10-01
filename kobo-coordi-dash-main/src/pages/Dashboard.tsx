@@ -6,6 +6,7 @@ import { DashboardOverview } from "@/components/DashboardOverview";
 import { ToolSearch } from "@/components/ToolSearch";
 import { ToolDetails } from "@/components/ToolDetails";
 import { DataProvider, useData } from "@/context/DataContext";
+import { Loader } from "@/components/Loader"; 
 
 const DashboardContent = () => {
   const [currentView, setCurrentView] = useState("overview");
@@ -24,8 +25,20 @@ const DashboardContent = () => {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader /> 
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-destructive">
+        Error: {error}
+      </div>
+    );
+
 
   return (
     <div className="min-h-screen flex w-full bg-gradient-to-br from-background via-forest-light/30 to-earth-blue-light/30">

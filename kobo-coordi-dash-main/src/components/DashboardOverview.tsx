@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { CheckCircle, Clock, AlertCircle, Users, Target } from "lucide-react";
 import { useData } from "@/context/DataContext";
 import { useEffect, useState } from "react";
+import { Loader } from "./Loader";
 
 interface DashboardOverviewProps {
   coordinatorEmail: string;
@@ -71,11 +72,12 @@ export const DashboardOverview = ({ coordinatorEmail }: DashboardOverviewProps) 
 
       {/* Loading and Error States */}
       {loading && (
-        <Card>
-          <CardContent className="text-center py-8">
-            <p className="text-muted-foreground">Loading dashboard data...</p>
-          </CardContent>
-        </Card>
+       <Card>
+        <CardContent className="flex items-center justify-center py-16">
+          <Loader />
+        </CardContent>
+      </Card>
+
       )}
       {error && (
         <Card className="border-l-4 border-l-destructive">

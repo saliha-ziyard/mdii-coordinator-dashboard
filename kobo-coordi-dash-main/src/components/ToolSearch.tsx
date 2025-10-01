@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/context/DataContext";
 import { getApiUrl } from "@/config/apiConfig";
 import { KOBO_CONFIG } from "@/config/koboConfig";
+import { Loader } from "./Loader";
 
 interface Tool {
   id: string;
@@ -240,7 +241,7 @@ export const ToolSearch = () => {
       {loading && (
         <Card className="shadow-[var(--shadow-card)]">
           <CardContent className="text-center py-8">
-            <p className="text-lg font-medium text-foreground">Loading tools...</p>
+            <p className="text-lg font-medium text-foreground"><Loader/></p>
           </CardContent>
         </Card>
       )}
