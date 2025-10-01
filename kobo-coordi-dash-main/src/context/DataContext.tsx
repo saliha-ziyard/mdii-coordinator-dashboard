@@ -18,6 +18,16 @@ interface EvalSubs {
   early4: Submission[];
 }
 
+interface Tool {
+  id: string;
+  name: string;
+  status: string;
+  ut3Submissions: number;
+  ut4Submissions: number;
+  coordinator: string;
+  maturityLevel: "advanced" | "early" | null;
+}
+
 interface Activity {
   id: string;
   tool: string;
@@ -37,13 +47,20 @@ interface Stats {
 interface DataContextType {
   stats: Stats;
   recentActivity: Activity[];
+  tools: Tool[];
   coordinatorEmail: string;
+  setData: (data: {
+    mainSubs: Submission[];
+    changeSubs: Submission[];
+    evalSubs: EvalSubs;
+    coordinatorEmail: string;
+  }) => void;
   fetchData: () => Promise<void>;
   loading: boolean;
   error: string | null;
 }
 
-const DataContext = createContext<DataContextType | undefined>(undefined);
+export const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [stats, setStats] = useState<Stats>({
@@ -54,6 +71,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     completionRate: 0,
   });
   const [recentActivity, setRecentActivity] = useState<Activity[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
   const [coordinatorEmail, setCoordinatorEmail] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +80,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const email = localStorage.getItem("coordinatorEmail");
     if (email) {
       setCoordinatorEmail(email);
-      fetchData();
+      // Data is fetched during login, so no need to fetch here unless needed
+      setLoading(false);
     } else {
       setLoading(false);
     }
@@ -72,47 +91,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setError(null);
     try {
-      // Fetch main form via proxy with custom label
+      // Fetch main form
       const mainRes = await fetch(getApiUrl(`assets/${KOBO_CONFIG.MAIN_FORM_ID}/data.json`, "mainForm"));
       if (!mainRes.ok) throw new Error("Failed to fetch main form");
       const mainData = await mainRes.json();
       const mainSubs: Submission[] = mainData.results || [];
 
-      // Fetch change coordinator via proxy with custom label
+      // Fetch change coordinator form
       const changeRes = await fetch(getApiUrl(`assets/${KOBO_CONFIG.change_coordinator}/data.json`, "changeCoordinator"));
       if (!changeRes.ok) throw new Error("Failed to fetch change form");
       const changeData = await changeRes.json();
       const changeSubs: Submission[] = changeData.results || [];
 
-      // Sort changes ascending by submission time
-      changeSubs.sort((a, b) => new Date(a._submission_time).getTime() - new Date(b._submission_time).getTime());
-
-      // Build currentCoord map and track appointment times
-      const currentCoord: { [key: string]: string } = {};
-      const appointmentTimes: { [key: string]: Date } = {};
-      mainSubs.forEach((sub) => {
-        const toolId = sub[KOBO_CONFIG.TOOL_ID_FIELD];
-        if (sub.coordinator_email) {
-          currentCoord[toolId] = sub.coordinator_email;
-          appointmentTimes[toolId] = new Date(sub._submission_time);
-        }
-      });
-      changeSubs.forEach((ch) => {
-        const toolId = ch.tool_id;
-        const newEmail = ch.Email_of_the_Coordinator; // Corrected field name
-        if (toolId && newEmail) {
-          currentCoord[toolId] = newEmail;
-          appointmentTimes[toolId] = new Date(ch._submission_time);
-        }
-      });
-
-      // Calculate total tools (all tools from main form)
-      const totalTools = mainSubs.length;
-
-      // Calculate appointed tools for the current coordinator
-      const appointedTools = Object.entries(currentCoord).filter(([_, email]) => email === coordinatorEmail).length;
-
-      // Fetch evaluation forms via proxy with custom labels
+      // Fetch evaluation forms
       const evalSubs: EvalSubs = {
         advanced3: [],
         early3: [],
@@ -134,7 +125,56 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         evalSubs[key as keyof EvalSubs] = data.results || [];
       }
 
-      // Create sets of tool_ids with submissions, using robust field extraction
+      // Process the fetched data
+      setData({ mainSubs, changeSubs, evalSubs, coordinatorEmail });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch data");
+      console.error("Data fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processData = (
+    mainSubs: Submission[],
+    changeSubs: Submission[],
+    evalSubs: EvalSubs,
+    email: string
+  ) => {
+    try {
+      // Sort change submissions by submission time
+      changeSubs.sort((a, b) => new Date(a._submission_time).getTime() - new Date(b._submission_time).getTime());
+
+      // Build current coordinators map and appointment times
+      const currentCoord: { [key: string]: string } = {};
+      const appointmentTimes: { [key: string]: Date } = {};
+      const maturityLevels: { [key: string]: "advanced" | "early" | null } = {};
+      mainSubs.forEach((sub) => {
+        const toolId = sub[KOBO_CONFIG.TOOL_ID_FIELD];
+        if (sub.coordinator_email) {
+          currentCoord[toolId] = sub.coordinator_email;
+          appointmentTimes[toolId] = new Date(sub._submission_time);
+          maturityLevels[toolId] = sub[KOBO_CONFIG.MATURITY_FIELD] || null;
+        }
+      });
+      changeSubs.forEach((ch) => {
+        const toolId = ch.tool_id;
+        const newEmail = ch.Email_of_the_Coordinator;
+        if (toolId && newEmail) {
+          currentCoord[toolId] = newEmail;
+          appointmentTimes[toolId] = new Date(ch._submission_time);
+        }
+      });
+
+      // Calculate total tools
+      const totalTools = mainSubs.length;
+
+      // Calculate appointed tools for the current coordinator
+      const appointedToolsCount = Object.entries(currentCoord).filter(
+        ([_, coordEmail]) => coordEmail === email
+      ).length;
+
+      // Helper to extract tool_id from evaluation submissions
       const getToolId = (sub: Submission): string => {
         return String(
           sub["group_intro/Q_13110000"] ||
@@ -145,12 +185,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ).trim();
       };
 
+      // Create sets of tool_ids with submissions
       const advanced3 = new Set(evalSubs.advanced3.map(getToolId));
       const early3 = new Set(evalSubs.early3.map(getToolId));
       const advanced4 = new Set(evalSubs.advanced4.map(getToolId));
       const early4 = new Set(evalSubs.early4.map(getToolId));
 
-      // Process tools
+      // Process tools for stats and recent activity
       let evaluated = 0;
       let ongoing = 0;
       const toolMap: { [key: string]: Submission } = {};
@@ -162,7 +203,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastTimes[toolId] = appointmentTimes[toolId] || new Date(sub._submission_time);
 
         const coord = currentCoord[toolId];
-        if (!coord || coord !== coordinatorEmail) return; // Only process tools for this coordinator
+        if (!coord || coord !== email) return; // Only process tools for this coordinator
 
         const maturity = sub[KOBO_CONFIG.MATURITY_FIELD];
         let has3 = false;
@@ -207,12 +248,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      // Calculate completion rate based on evaluated tools out of appointed tools
-      const completionRate = appointedTools > 0 ? Math.round((evaluated / appointedTools) * 100) : 0;
+      // Calculate completion rate
+      const completionRate = appointedToolsCount > 0 ? Math.round((evaluated / appointedToolsCount) * 100) : 0;
 
       // Recent activity: last 3 tools appointed to this coordinator
       const appointedIds = Object.entries(currentCoord)
-        .filter(([_, email]) => email === coordinatorEmail)
+        .filter(([_, coordEmail]) => coordEmail === email)
         .map(([id]) => id);
       let activities: Activity[] = appointedIds.map((id) => ({
         id,
@@ -221,25 +262,69 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         date: (appointmentTimes[id] || lastTimes[id]).toLocaleDateString("en-CA"),
         coordinator: currentCoord[id],
       }));
-      // Sort by appointment time (most recent first)
-      activities.sort((a, b) => 
-        (appointmentTimes[b.id] || lastTimes[b.id]).getTime() - 
+      activities.sort((a, b) =>
+        (appointmentTimes[b.id] || lastTimes[b.id]).getTime() -
         (appointmentTimes[a.id] || lastTimes[a.id]).getTime()
       );
-      const recent = activities.slice(0, 3); // Last 3 tools appointed to this coordinator
+      const recent = activities.slice(0, 3);
 
-      setStats({ totalTools, appointedTools, evaluatedTools: evaluated, ongoingTools: ongoing, completionRate });
+      // Process tools for ToolSearch
+      const submissionCounts: { [key: string]: { ut3: number; ut4: number } } = {};
+      mainSubs.forEach((sub: any) => {
+        const toolId = sub[KOBO_CONFIG.TOOL_ID_FIELD];
+        const maturity = sub[KOBO_CONFIG.MATURITY_FIELD];
+        let ut3Subs = 0;
+        let ut4Subs = 0;
+
+        if (maturity === "advanced") {
+          ut3Subs = evalSubs.advanced3.filter((s: any) => getToolId(s) === toolId).length;
+          ut4Subs = evalSubs.advanced4.filter((s: any) => getToolId(s) === toolId).length;
+        } else if (maturity === "early") {
+          ut3Subs = evalSubs.early3.filter((s: any) => getToolId(s) === toolId).length;
+          ut4Subs = evalSubs.early4.filter((s: any) => getToolId(s) === toolId).length;
+        }
+
+        submissionCounts[toolId] = { ut3: ut3Subs, ut4: ut4Subs };
+      });
+
+      const appointedTools = mainSubs
+        .filter((sub: any) => currentCoord[sub[KOBO_CONFIG.TOOL_ID_FIELD]] === email)
+        .map((sub: any) => {
+          const toolId = sub[KOBO_CONFIG.TOOL_ID_FIELD];
+          return {
+            id: toolId,
+            name: sub[KOBO_CONFIG.TOOL_NAME_FIELD] || "Unknown Tool",
+            status: toolStatus[toolId] || "active",
+            ut3Submissions: submissionCounts[toolId]?.ut3 || 0,
+            ut4Submissions: submissionCounts[toolId]?.ut4 || 0,
+            coordinator: currentCoord[toolId],
+            maturityLevel: maturityLevels[toolId],
+          };
+        });
+
+      setStats({ totalTools, appointedTools: appointedToolsCount, evaluatedTools: evaluated, ongoingTools: ongoing, completionRate });
       setRecentActivity(recent);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to fetch data");
-      console.error("Data fetch error:", error);
-    } finally {
+      setTools(appointedTools);
+      setCoordinatorEmail(email);
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to process data");
       setLoading(false);
     }
   };
 
+  const setData = (data: {
+    mainSubs: Submission[];
+    changeSubs: Submission[];
+    evalSubs: EvalSubs;
+    coordinatorEmail: string;
+  }) => {
+    setLoading(true);
+    processData(data.mainSubs, data.changeSubs, data.evalSubs, data.coordinatorEmail);
+  };
+
   return (
-    <DataContext.Provider value={{ stats, recentActivity, coordinatorEmail, fetchData, loading, error }}>
+    <DataContext.Provider value={{ stats, recentActivity, tools, coordinatorEmail, setData, fetchData, loading, error }}>
       {children}
     </DataContext.Provider>
   );

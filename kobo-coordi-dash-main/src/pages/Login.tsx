@@ -1,5 +1,4 @@
-// src/components/Login.tsx
-import { useState } from "react";
+import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,12 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { KOBO_CONFIG } from "@/config/koboConfig";
 import { getApiUrl } from "@/config/apiConfig";
+import { DataContext } from "@/context/DataContext";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const dataContext = useContext(DataContext);
+
+  if (!dataContext) {
+    throw new Error("Login must be used within a DataProvider");
+  }
+
+  const { setData } = dataContext;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,28 +36,50 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      // Fetch main form submissions via proxy
+      // Fetch main form submissions
       const mainRes = await fetch(getApiUrl(`assets/${KOBO_CONFIG.MAIN_FORM_ID}/data.json`, "mainForm"));
       if (!mainRes.ok) {
         throw new Error(`Failed to fetch main form: ${mainRes.status} ${mainRes.statusText}`);
       }
       const mainData = await mainRes.json();
-      const mainSubs = mainData.results;
+      const mainSubs = mainData.results || [];
 
-      // Fetch change coordinator submissions via proxy
+      // Fetch change coordinator submissions
       const changeRes = await fetch(getApiUrl(`assets/${KOBO_CONFIG.change_coordinator}/data.json`, "changeCoordinator"));
       if (!changeRes.ok) {
         throw new Error(`Failed to fetch change form: ${changeRes.status} ${changeRes.statusText}`);
       }
       const changeData = await changeRes.json();
-      const changeSubs = changeData.results;
+      const changeSubs = changeData.results || [];
+
+      // Fetch evaluation forms
+      const evalSubs = {
+        advanced3: [],
+        early3: [],
+        advanced4: [],
+        early4: [],
+      };
+      const formMap = {
+        advanced3: { id: KOBO_CONFIG.USERTYPE3_FORMS.advanced, label: "advanced3" },
+        early3: { id: KOBO_CONFIG.USERTYPE3_FORMS.early, label: "early3" },
+        advanced4: { id: KOBO_CONFIG.USERTYPE4_FORMS.advanced, label: "advanced4" },
+        early4: { id: KOBO_CONFIG.USERTYPE4_FORMS.early, label: "early4" },
+      };
+
+      for (const key in formMap) {
+        const { id: fid, label } = formMap[key as keyof typeof formMap];
+        const res = await fetch(getApiUrl(`assets/${fid}/data.json`, label));
+        if (!res.ok) throw new Error(`Failed to fetch form ${key}`);
+        const data = await res.json();
+        evalSubs[key as keyof typeof evalSubs] = data.results || [];
+      }
 
       // Sort changes by submission time ascending
       changeSubs.sort((a, b) => 
         new Date(a._submission_time).getTime() - new Date(b._submission_time).getTime()
       );
 
-      // Build current coordinators map: toolID -> email
+      // Build current coordinators map
       const currentCoord: Record<string, string> = {};
       mainSubs.forEach((sub: any) => {
         if (sub.coordinator_email) {
@@ -59,15 +88,14 @@ const Login = () => {
       });
       changeSubs.forEach((ch: any) => {
         const toolId = ch.tool_id;
-        const newEmail = ch.new_coordinator_email;
+        const newEmail = ch.Email_of_the_Coordinator;
         if (toolId && newEmail) {
           currentCoord[toolId] = newEmail;
         }
       });
 
-      // Get set of all current coordinator emails
+      // Check if email is a coordinator
       const coordinators = new Set(Object.values(currentCoord));
-
       if (!coordinators.has(email)) {
         toast({
           title: "Access Denied",
@@ -77,8 +105,10 @@ const Login = () => {
         return;
       }
 
-      // Store email and navigate
+      // Store email and data in context
       localStorage.setItem("coordinatorEmail", email);
+      setData({ mainSubs, changeSubs, evalSubs, coordinatorEmail: email });
+
       toast({
         title: "Login Successful",
         description: "Redirecting to dashboard...",
