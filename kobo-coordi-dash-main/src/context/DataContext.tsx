@@ -55,6 +55,7 @@ interface DataContextType {
     evalSubs: EvalSubs;
     coordinatorEmail: string;
   }) => void;
+  setTools: (tools: Tool[] | ((prev: Tool[]) => Tool[])) => void; // Added setTools to the interface
   fetchData: () => Promise<void>;
   loading: boolean;
   error: string | null;
@@ -80,7 +81,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const email = localStorage.getItem("coordinatorEmail");
     if (email) {
       setCoordinatorEmail(email);
-      // Data is fetched during login, so no need to fetch here unless needed
       setLoading(false);
     } else {
       setLoading(false);
@@ -324,7 +324,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <DataContext.Provider value={{ stats, recentActivity, tools, coordinatorEmail, setData, fetchData, loading, error }}>
+    <DataContext.Provider value={{ stats, recentActivity, tools, coordinatorEmail, setData, setTools, fetchData, loading, error }}>
       {children}
     </DataContext.Provider>
   );

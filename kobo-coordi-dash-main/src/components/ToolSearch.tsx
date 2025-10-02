@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/context/DataContext";
 
@@ -22,7 +23,9 @@ interface Tool {
 export const ToolSearch = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const { tools, loading, error } = useData();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<{ id: string; name: string } | null>(null);
+  const { tools, setTools, loading, error } = useData();
   const { toast } = useToast();
   const toolsPerPage = 10;
 
@@ -39,15 +42,76 @@ export const ToolSearch = () => {
   const paginatedTools = filteredTools.slice(startIndex, startIndex + toolsPerPage);
 
   const handleStopTool = (toolId: string, toolName: string) => {
-    const currentDateTime = new Date().toLocaleString();
-    toast({
-      title: "Tool Stopped",
-      description: `${toolName} submissions stopped at ${currentDateTime}`,
-    });
-    console.log(`Tool ${toolId} stopped at ${currentDateTime}`);
-    // Update tool status
-    // Note: You may need to update the context or backend to persist this change
-    // For now, this updates local state (not persisted)
+    setSelectedTool({ id: toolId, name: toolName });
+    setIsDialogOpen(true);
+  };
+
+  const handleConfirmStop = async () => {
+    if (!selectedTool) return;
+
+    try {
+      const apiUrl = `/api/score-tool?tool_id=${selectedTool.id}`;
+      const response = await fetch(apiUrl);
+
+      if (!response.ok) {
+        throw new Error(`Failed to trigger tool stop: ${response.statusText}`);
+      }
+
+      // Update tool status locally
+      setTools((prev: Tool[]) =>
+        prev.map((tool) =>
+          tool.id === selectedTool.id ? { ...tool, status: "stopped" } : tool
+        )
+      );
+
+      const currentDateTime = new Date().toLocaleString();
+      toast({
+        title: "Tool Stopped",
+        description: `${selectedTool.name} submissions stopped at ${currentDateTime}. Email will be sent shortly.`,
+      });
+
+      // Wait 6 seconds, then trigger Power Automate flow
+      setTimeout(async () => {
+        try {
+          const flowUrl = "https://default6afa0e00fa1440b78a2e22a7f8c357.d5.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/080a15cb2b9b4387ac23f1a7978a8bbb/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=XlWqhTpqNuxZJkvKeCoWziBX5Vhgtix8zdUq0IF8Npw"; // Replace with your actual Power Automate HTTP trigger URL
+          const flowResponse = await fetch(flowUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ tool_id: selectedTool.id }),
+          });
+
+          if (!flowResponse.ok) {
+            throw new Error(`Failed to trigger email flow: ${flowResponse.statusText}`);
+          }
+
+          toast({
+            title: "Email Triggered",
+            description: `Email for tool ${selectedTool.id} has been sent via Power Automate.`,
+          });
+        } catch (flowErr: any) {
+          console.error("Error triggering Power Automate:", flowErr);
+          toast({
+            title: "Error",
+            description: `Failed to trigger email: ${flowErr.message}`,
+            variant: "destructive",
+          });
+        }
+      }, 6000);
+
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      console.error("Error stopping tool:", err);
+      toast({
+        title: "Error",
+        description:
+          err.message.includes("Failed to fetch") || err.message.includes("CORS")
+            ? "Unable to connect to the server. Please try again later or contact support."
+            : `Failed to stop tool: ${err.message}`,
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -199,6 +263,26 @@ export const ToolSearch = () => {
           )}
         </>
       )}
+
+      {/* Confirmation Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Stop</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to stop UT3 and UT4 submissions for {selectedTool?.name}?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmStop}>
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
