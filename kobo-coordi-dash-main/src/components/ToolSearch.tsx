@@ -24,7 +24,7 @@ export const ToolSearch = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedTool, setSelectedTool] = useState<{ id: string; name: string } | null>(null);
+  const [selectedTool, setSelectedTool] = useState<{ id: string; name: string; maturityLevel: string | null } | null>(null);
   const { tools, setTools, loading, error } = useData();
   const { toast } = useToast();
   const toolsPerPage = 10;
@@ -41,13 +41,18 @@ export const ToolSearch = () => {
   const startIndex = (currentPage - 1) * toolsPerPage;
   const paginatedTools = filteredTools.slice(startIndex, startIndex + toolsPerPage);
 
-  const handleStopTool = (toolId: string, toolName: string) => {
-    setSelectedTool({ id: toolId, name: toolName });
+  const handleStopTool = (toolId: string, toolName: string, maturityLevel: string | null) => {
+    setSelectedTool({ id: toolId, name: toolName, maturityLevel });
     setIsDialogOpen(true);
   };
 
   const handleConfirmStop = async () => {
     if (!selectedTool) return;
+
+    // Capture the current date and time when stop is clicked
+    const currentDateTime = new Date();
+    const formattedDateTime = currentDateTime.toLocaleString();
+    const isoDateTime = currentDateTime.toISOString();
 
     try {
       const apiUrl = `/api/score-tool?tool_id=${selectedTool.id}`;
@@ -64,22 +69,32 @@ export const ToolSearch = () => {
         )
       );
 
-      const currentDateTime = new Date().toLocaleString();
       toast({
         title: "Tool Stopped",
-        description: `${selectedTool.name} submissions stopped at ${currentDateTime}. Email will be sent shortly.`,
+        description: `${selectedTool.name} submissions stopped at ${formattedDateTime}. Email will be sent shortly.`,
       });
 
       // Wait 6 seconds, then trigger Power Automate flow
       setTimeout(async () => {
         try {
-          const flowUrl = "https://default6afa0e00fa1440b78a2e22a7f8c357.d5.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/080a15cb2b9b4387ac23f1a7978a8bbb/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=XlWqhTpqNuxZJkvKeCoWziBX5Vhgtix8zdUq0IF8Npw"; // Replace with your actual Power Automate HTTP trigger URL
+          const flowUrl = "https://default6afa0e00fa1440b78a2e22a7f8c357.d5.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/080a15cb2b9b4387ac23f1a7978a8bbb/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=XlWqhTpqNuxZJkvKeCoWziBX5Vhgtix8zdUq0IF8Npw";
+          
+          // Prepare the payload with all required data
+          const payload = {
+            tool_id: selectedTool.id,
+            tool_name: selectedTool.name,
+            tool_maturity: selectedTool.maturityLevel || "unknown",
+            stopped_at: formattedDateTime,
+            stopped_at_iso: isoDateTime,
+            timestamp: currentDateTime.getTime()
+          };
+
           const flowResponse = await fetch(flowUrl, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ tool_id: selectedTool.id }),
+            body: JSON.stringify(payload),
           });
 
           if (!flowResponse.ok) {
@@ -202,7 +217,7 @@ export const ToolSearch = () => {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => handleStopTool(tool.id, tool.name)}
+                          onClick={() => handleStopTool(tool.id, tool.name, tool.maturityLevel)}
                           className="gap-2"
                         >
                           <StopCircle className="w-4 h-4" />
