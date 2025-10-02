@@ -54,7 +54,7 @@ const Index = () => {
               </div>
               <CardTitle>Dashboard Overview</CardTitle>
               <CardDescription>
-                Real-time statistics and summaries of all research tools, appointments, and evaluations
+                Real-time statistics and summaries of all research tools and evaluations
               </CardDescription>
             </CardHeader>
           </Card>
