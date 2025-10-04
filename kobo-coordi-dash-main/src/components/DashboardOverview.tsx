@@ -90,7 +90,7 @@ export const DashboardOverview = ({ coordinatorEmail }: DashboardOverviewProps) 
       {/* Stats Grid */}
       {!loading && !error && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          <Card className="shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow">
+          {/* <Card className="shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Tools</CardTitle>
               <Target className="h-4 w-4 text-forest" />
@@ -99,7 +99,7 @@ export const DashboardOverview = ({ coordinatorEmail }: DashboardOverviewProps) 
               <div className="text-2xl font-bold text-foreground">{stats?.totalTools ?? 0}</div>
               <p className="text-xs text-muted-foreground">All research instruments</p>
             </CardContent>
-          </Card>
+          </Card> */}
 
           <Card className="shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-elevated)] transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -151,7 +151,7 @@ export const DashboardOverview = ({ coordinatorEmail }: DashboardOverviewProps) 
       {!loading && !error && (
         <Card className="shadow-[var(--shadow-card)]">
           <CardHeader>
-            <CardTitle>Recent Tool Activity</CardTitle>
+            <CardTitle>Latest Tools submitted</CardTitle>
             <CardDescription>Latest tools appointed to {coordinatorEmail || "you"}</CardDescription>
           </CardHeader>
           <CardContent>

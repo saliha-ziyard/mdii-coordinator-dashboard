@@ -73,9 +73,9 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                     isActive={currentView === item.id}
                     className="w-full justify-start"
                   >
-                    <item.icon className="w-4 h-4" />
+                    <item.icon className="w-4 h-4 " />
                     <div className="flex flex-col items-start">
-                      <span className="font-medium">{item.title}</span>
+                      <span className="font-medium mt-5">{item.title}</span>
                       <span className="text-xs text-muted-foreground">{item.description}</span>
                     </div>
                   </SidebarMenuButton>
