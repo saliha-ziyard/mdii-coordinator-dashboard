@@ -60,10 +60,10 @@ const Login = () => {
         early4: [],
       };
       const formMap = {
-        advanced3: { id: KOBO_CONFIG.USERTYPE3_FORMS.advanced, label: "advanced3" },
-        early3: { id: KOBO_CONFIG.USERTYPE3_FORMS.early, label: "early3" },
-        advanced4: { id: KOBO_CONFIG.USERTYPE4_FORMS.advanced, label: "advanced4" },
-        early4: { id: KOBO_CONFIG.USERTYPE4_FORMS.early, label: "early4" },
+        advanced3: { id: KOBO_CONFIG.USERTYPE3_FORMS.advance_stage, label: "advanced3" },
+        early3: { id: KOBO_CONFIG.USERTYPE3_FORMS.early_stage, label: "early3" },
+        advanced4: { id: KOBO_CONFIG.USERTYPE4_FORMS.advance_stage, label: "advanced4" },
+        early4: { id: KOBO_CONFIG.USERTYPE4_FORMS.early_stage, label: "early4" },
       };
 
       for (const key in formMap) {
