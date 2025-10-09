@@ -1,4 +1,4 @@
-import { BarChart3, Search, LogOut } from "lucide-react";
+import { BarChart3, Search, LogOut, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -36,6 +36,12 @@ const menuItems = [
     title: "Tool Details",
     icon: Search,
     description: "View specific tool submissions"
+  },
+  {
+    id: "feedback",
+    title: "Feedback & Support",
+    icon: MessageSquare,
+    description: "Share feedback with the team"
   }
 ];
 

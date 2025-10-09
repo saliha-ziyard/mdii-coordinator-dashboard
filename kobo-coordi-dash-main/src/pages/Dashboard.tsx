@@ -6,6 +6,7 @@ import { ToolSearch } from "@/components/ToolSearch";
 import { ToolDetails } from "@/components/ToolDetails";
 import { useData } from "@/context/DataContext";
 import { Loader } from "@/components/Loader";
+import { CoordinatorFeedback } from "@/components/CoordinatorFeedback ";
 
 const DashboardContent = () => {
   const [currentView, setCurrentView] = useState("overview");
@@ -19,6 +20,8 @@ const DashboardContent = () => {
         return <ToolSearch />;
       case "tool-details":
         return <ToolDetails />;
+      case "feedback":
+        return <CoordinatorFeedback />;
       default:
         return <DashboardOverview coordinatorEmail={coordinatorEmail} />;
     }
